@@ -300,8 +300,6 @@ static int srec_b2b_req(struct sip_msg *msg, struct src_sess *ss)
 	if (get_body(msg, &body) != 0 || body.len==0) {
 		if (msg->REQ_METHOD != METHOD_UPDATE)
 			goto reply;
-		if (msg->REQ_METHOD == METHOD_BYE)
-			raise_siprec_stop_event(ss);
 		code = 200;
 	} else {
 		if (srec_rtp.copy_answer(ss->ctx->rtp, &ss->instance,
@@ -344,9 +342,18 @@ static int srec_b2b_notify(struct sip_msg *msg, str *key, int type,
 		LM_DBG("sess=%p no longer active\n", ss);
 		return 0;
 	}
-	/* for now we only receive replies from SRS */
-	if (type != B2B_REPLY)
+	/* The SRS may terminate the recording session with an in-dialog BYE. */
+	if (type != B2B_REPLY) {
+		if (msg->REQ_METHOD == METHOD_BYE) {
+			if (srec_reply(ss, METHOD_BYE, 200, NULL) < 0) {
+				LM_ERR("could not reply to SRS BYE\n");
+				return -1;
+			}
+			ret = 0;
+			goto no_recording;
+		}
 		return srec_b2b_req(msg, ss);
+	}
 
 	if (!msg->cseq && ((parse_headers(msg, HDR_CSEQ_F, 0) < 0) || !msg->cseq)) {
 		LM_ERR("could not parse reply method\n");
