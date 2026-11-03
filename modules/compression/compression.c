@@ -453,8 +453,20 @@ static int fixup_whitelist_compact(void** param)
 
 static int fixup_whitelist_compress(void** param)
 {
-	return parse_whitelist((str *)(*param),
-			(mc_whitelist_p *)param, NULL);
+	str *s = (str *)*param;
+
+	if (parse_whitelist(s, (mc_whitelist_p *)param, NULL) < 0)
+		return -1;
+
+	if (((mc_whitelist_p)*param)->keep_others) {
+		LM_ERR("'*' is only supported by mc_compact() [%.*s]\n",
+				s->len, s->s);
+		free_whitelist(*param);
+		*param = s;
+		return -1;
+	}
+
+	return 0;
 }
 
 static int fixup_whitelist_free(void **param)
@@ -602,6 +614,7 @@ static mc_whitelist_p mc_dup_whitelist(mc_whitelist_p src)
 	}
 	memcpy(dst->hdr_mask, src->hdr_mask, sizeof(src->hdr_mask));
 	dst->other_hdr = NULL;
+	dst->keep_others = src->keep_others;
 
 	/* now copy other headers */
 	for (hdr = src->other_hdr; hdr; hdr = hdr->next) {
@@ -695,6 +708,8 @@ static int mc_compact_cb(char** buf_p, struct mc_compact_args *mc_compact_args, 
 
 	struct hdr_field *hf;
 	struct hdr_field** hdr_mask;
+	/* unlisted headers kept due to '*' - copied verbatim, never merged */
+	struct hdr_field *kept = NULL, *kept_last = NULL;
 
 	body_frag_p frg;
 	body_frag_p frg_head;
@@ -760,6 +775,19 @@ static int mc_compact_cb(char** buf_p, struct mc_compact_args *mc_compact_args, 
 
 				hdr_mask[hf->type] = hf;
 			}
+		} else if (mc_compact_args->wh_list &&
+				mc_compact_args->wh_list->keep_others &&
+				/* rebuilt below, from the new body */
+				hf->type != HDR_CONTENTLENGTH_T) {
+			/* keep it in its original form, as a separate header */
+			msg_total_len += hf->name.len + DELIM_LEN;
+			msg_total_len += hf->body.len + CRLF_LEN;
+
+			if (kept_last)
+				kept_last->next = hf;
+			else
+				kept = hf;
+			kept_last = hf;
 		} else {
 			clean_hdr_field(hf);
 			pkg_free(hf);
@@ -958,6 +986,21 @@ again:
 		if (i == HDR_OTHER_T)
 			break;
 	}
+
+	/* Copy the headers kept due to '*', after all the others */
+	while (kept) {
+		wrap_copy_and_update(&new_buf.s, kept->name.s, kept->name.len,
+				&new_buf.len);
+		wrap_copy_and_update(&new_buf.s, DELIM, DELIM_LEN, &new_buf.len);
+		wrap_copy_and_update(&new_buf.s, kept->body.s, kept->body.len,
+				&new_buf.len);
+		wrap_copy_and_update(&new_buf.s, CRLF, CRLF_LEN, &new_buf.len);
+
+		hf = kept;
+		kept = kept->next;
+		clean_hdr_field(hf);
+		pkg_free(hf);
+	}
 	/* Copy the body of the message */
 	frg = frg_head;
 	while (frg) {
@@ -1005,6 +1048,12 @@ memerr:
 free_mem:
 	if (hdr_mask != NULL)
 		free_hdr_mask(hdr_mask);
+	while (kept) {
+		hf = kept;
+		kept = kept->next;
+		clean_hdr_field(hf);
+		pkg_free(hf);
+	}
 	return -1;
 }
 

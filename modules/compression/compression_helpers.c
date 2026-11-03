@@ -137,6 +137,19 @@ int search_hdr(mc_whitelist_p wh_list, str* hdr_name)
 }
 
 /*
+ * Adds a header name, or the '*' wildcard, to the whitelist
+ */
+static int add_whitelist_entry(mc_whitelist_p wh_list, str* hdr_name)
+{
+	if (hdr_name->len == 1 && hdr_name->s[0] == '*') {
+		wh_list->keep_others = 1;
+		return 0;
+	}
+
+	return search_hdr(wh_list, hdr_name);
+}
+
+/*
  * Function that parses whitelist string
  */
 int parse_whitelist(str* param, mc_whitelist_p* wh_list_p, unsigned char* def_hdrs_mask)
@@ -169,10 +182,10 @@ int parse_whitelist(str* param, mc_whitelist_p* wh_list_p, unsigned char* def_hd
 				have to be ':' for parse_hname2 */
 				if (eoh) {
 					eoh = 0;
-					if (search_hdr(wh_list, &hdr_name)) {
+					if (add_whitelist_entry(wh_list, &hdr_name)) {
 						LM_ERR("cannot find given header [%.*s]\n",
 								hdr_name.len, hdr_name.s);
-						return -1;
+						goto error;
 					}
 				}
 
@@ -199,15 +212,18 @@ int parse_whitelist(str* param, mc_whitelist_p* wh_list_p, unsigned char* def_hd
 
 	/* Last header name which may not have been moved to wh_list */
 	if (eoh) {
-		if (search_hdr(wh_list, &hdr_name)) {
+		if (add_whitelist_entry(wh_list, &hdr_name)) {
 			LM_ERR("cannot find last given header\n");
-			return -1;
+			goto error;
 		}
 	}
 
 end:
 	*wh_list_p = wh_list;
 	return 0;
+error:
+	free_whitelist(wh_list);
+	return -1;
 }
 
 /*

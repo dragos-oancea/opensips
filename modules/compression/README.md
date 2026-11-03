@@ -194,7 +194,11 @@ Meaning of the parameters is as follows:
 
 - *whitelist* (string, optional) - Whitelist of headers not to be
 removed, except from the mandatory ones. The whitelist header names
-must pe separated by '|'.
+must pe separated by '|'. If the whitelist contains '*', the headers
+which are not listed are no longer removed - they are kept in their
+original form (full name, not merged with other headers of the same
+name), after all the other headers. The mandatory and the listed headers
+are still compacted as described above.
 - *flags* (string) - Controls the behavior of the function. Possible flags are:
 
   - "n" - Do not use short form of headers.
@@ -206,6 +210,10 @@ This function can be used from REQUEST_ROUTE, LOCAL_ROUTE, FAILURE_ROUTE.
 ```opensips title="mc_compress usage"
 ...
 if (!mc_compact("Max-Forwards|P-Asserted-Identity"))
+	xlog("compaction failed\n");
+...
+# compact the known headers, but keep all the other ones
+if (!mc_compact("*"))
 	xlog("compaction failed\n");
 ...
 	

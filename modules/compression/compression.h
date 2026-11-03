@@ -47,6 +47,8 @@ typedef struct mc_whitelist
 {
 	unsigned char hdr_mask[HDR_MASK_SIZE];
 	struct mc_other_hdr_lst* other_hdr;
+	/* '*' given - keep the unlisted headers, as they are */
+	int keep_others;
 } mc_whitelist_t, *mc_whitelist_p;
 
 typedef struct body_fragm
