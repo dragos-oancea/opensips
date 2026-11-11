@@ -1369,6 +1369,13 @@ modifications made to the sdp will be visible
 to the codec_exists functions( e.g. after
 calling codec_delete("speex") , codec_exists("speex")
 will return false ).
+
+
+This also applies to codecs removed indirectly. For example,
+codec_delete_except_re("PCMU|PCMA") also removes opus, so a
+later codec_exists("opus") returns false, even though opus was
+in the received SDP. To test what the caller offered, call
+codec_exists() before any codec_delete*() or codec_move*() call.
 <!-- CONTRIBUTORS -->
 
 ### License

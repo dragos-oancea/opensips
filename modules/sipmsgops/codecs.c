@@ -31,6 +31,10 @@
 
 #define MAX_STREAMS 64
 
+/* separator between the payload numbers of an m= line; the SDP parser
+ * accepts both spaces and tabs, so the codec functions must do the same */
+#define is_pl_sep(_c) ((_c) == ' ' || (_c) == '\t')
+
 static struct lump *lumps[MAX_STREAMS];
 static int lumps_len;
 
@@ -102,7 +106,7 @@ static int create_codec_lumps(struct sip_msg * msg)
 		{
 			payloads = cur_cell->payloads;
 			/* include the previous whitespaces */
-			while (payloads.s > cur_cell->body.s && *(payloads.s-1) == ' ') {
+			while (payloads.s > cur_cell->body.s && is_pl_sep(*(payloads.s-1))) {
 				payloads.s--;
 				payloads.len++;
 			}
@@ -288,7 +292,7 @@ static struct lump * get_associated_lump(struct sip_msg * msg,
 	{
 		have = lumps[i]->u.offset;
 		payload = cell->payloads.s;
-		while (payload > cell->body.s && *(payload - 1) == ' ')
+		while (payload > cell->body.s && is_pl_sep(*(payload - 1)))
 			payload--;
 		want = payload - msg->buf;
 
@@ -504,7 +508,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 				/* find the end of the number */
 				found.s = cur;
 
-				while(  cur < lmp->u.value + lmp->len &&  *cur != ' ' )
+				while(  cur < lmp->u.value + lmp->len && !is_pl_sep(*cur) )
 					cur++;
 
 				found.len = cur - found.s;
@@ -516,7 +520,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 				} else {
 					/* continue on searching => skip spaces
 					   if there still are any */
-					while( cur < lmp->u.value + lmp->len && * cur == ' '  )
+					while( cur < lmp->u.value + lmp->len && is_pl_sep(*cur) )
 						cur++;
 				}
 			}
@@ -591,7 +595,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 
 				{
 					/* take the previous whitespaces as well */
-					while (found.s > lmp->u.value && *(found.s - 1) == ' ') {
+					while (found.s > lmp->u.value && is_pl_sep(*(found.s - 1))) {
 						found.s--;
 						found.len++;
 					}
@@ -599,7 +603,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 					/* when trimming the very last payload, avoid trailing ws */
 					if (cur == lmp->u.value + lmp->len) {
 						tmp = found.s;
-						while (tmp>lmp->u.value && *(--tmp) == ' ') {
+						while (tmp>lmp->u.value && is_pl_sep(*(--tmp))) {
 							found.s--;
 							found.len++;
 						}
@@ -620,7 +624,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 							/* find the end of the number */
 							linked_found.s = cur;
 
-							while(  cur < lmp->u.value + lmp->len &&  *cur != ' ' )
+							while(  cur < lmp->u.value + lmp->len && !is_pl_sep(*cur) )
 								cur++;
 
 							linked_found.len = cur - linked_found.s;
@@ -632,14 +636,14 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 							} else {
 								/* continue on searching => skip spaces
 								   if there still are any */
-								while( cur < lmp->u.value + lmp->len && * cur == ' '  )
+								while( cur < lmp->u.value + lmp->len && is_pl_sep(*cur) )
 									cur++;
 							}
 						}
 
 						if (linked_match) {
 							/* take the previous whitespaces as well */
-							while (linked_found.s > lmp->u.value && *(linked_found.s - 1) == ' ') {
+							while (linked_found.s > lmp->u.value && is_pl_sep(*(linked_found.s - 1))) {
 								linked_found.s--;
 								linked_found.len++;
 							}
@@ -647,7 +651,7 @@ static int stream_process(struct sip_msg * msg, struct sdp_stream_cell *cell,
 							/* when trimming the very last payload, avoid trailing ws */
 							if (cur == lmp->u.value + lmp->len) {
 								tmp = linked_found.s;
-								while (tmp>lmp->u.value && *(--tmp) == ' ') {
+								while (tmp>lmp->u.value && is_pl_sep(*(--tmp))) {
 									linked_found.s--;
 									linked_found.len++;
 								}
