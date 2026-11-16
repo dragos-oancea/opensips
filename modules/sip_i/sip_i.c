@@ -1065,8 +1065,17 @@ int pv_set_isup_param(struct sip_msg* msg, pv_param_t *param, int op, pv_value_t
 				return -1;
 			}
 		} else if (val->flags & PV_VAL_STR) {
-			if (val->rs.s[0] == '0' && val->rs.s[1] == 'x') {
+			if (val->rs.len >= 2 && val->rs.s[0] == '0' && val->rs.s[1] == 'x') {
 				/* read whole param from hex str */
+				if ((val->rs.len - 2) % 2 ||
+						(val->rs.len - 2) / 2 > PARAM_MAX_LEN) {
+					LM_WARN("Invalid length: %d for $isup_param(%.*s)\n",
+						(val->rs.len - 2) / 2,
+						isup_params[fix->isup_params_idx].name.len,
+						isup_params[fix->isup_params_idx].name.s);
+					return -1;
+				}
+
 				if (param_type == 0 &&
 					(val->rs.len-2)/2 != isup_params[fix->isup_params_idx].len) {
 					LM_WARN("Incorrect length: %d for $isup_param(%.*s), it must be exactly: %d\n",
@@ -1372,7 +1381,8 @@ set_cgpn:
 		LM_INFO("\"sip:\" URI required for P-Asserted-Identity\n");
 		goto cgpn_err;
 	}
-	if (pai->parsed_uri.user.s[0] != '+') {
+	if (!pai->parsed_uri.user.s || pai->parsed_uri.user.len <= 0 ||
+			pai->parsed_uri.user.s[0] != '+') {
 		LM_INFO("P-Asserted-Identity number should start with \"+\" sign\n");
 		goto cgpn_err;
 	}
@@ -1701,6 +1711,14 @@ static int add_isup_part_cmd(struct sip_msg *msg, str *msg_type, str *hdrs)
 				/* 4xx, 5xx -> REL */
 				isup_msg_idx = get_msg_idx_by_type(ISUP_REL);
 			else if (msg->REPLY_STATUS == 200) {
+				if (!msg->cseq && parse_headers(msg, HDR_CSEQ_F, 0) == -1) {
+					LM_WARN("Could not parse CSeq header\n");
+					return -1;
+				}
+				if (!msg->cseq || !msg->cseq->parsed) {
+					LM_WARN("Could not map SIP message to ISUP message type without CSeq\n");
+					return -1;
+				}
 				if (get_cseq(msg)->method_id == METHOD_INVITE)
 					/* 200 OK INVITE -> ANM */
 					isup_msg_idx = get_msg_idx_by_type(ISUP_ANM);

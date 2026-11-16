@@ -209,6 +209,10 @@ int unpack_hepv12(char *buf, int len, struct hep_desc* h)
 
 	/* time */
 	if(heph->hp_v == 2) {
+		if (len - offset < (int)sizeof(struct hep_timehdr)) {
+			LM_ERR("invalid HEPv2 time header length\n");
+			return -1;
+		}
 		offset+=sizeof(struct hep_timehdr);
 		heptime_tmp = (struct hep_timehdr*) hep_payload;
 		hep_payload += sizeof(struct hep_timehdr);
@@ -482,6 +486,8 @@ int unpack_hepv3(char *buf, int len, struct hep_desc *h)
 
 				if (compression_api.check_rc(rc)) {
 					LM_ERR("payload decompression failed!\n");
+					if (decompressed_payload.s)
+						pkg_free(decompressed_payload.s);
 					goto safe_exit;
 				}
 
