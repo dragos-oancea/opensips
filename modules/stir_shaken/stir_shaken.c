@@ -59,6 +59,7 @@
 #include "../../mod_fix.h"
 #include "../../data_lump_rpl.h"
 #include "../../mi/mi.h"
+#include "../../ipc.h"
 
 #include "stir_shaken.h"
 #include "div.h"
@@ -401,25 +402,6 @@ static int init_cert_validation(void)
 	return 0;
 }
 
-/* called by the MI reloads: make sure the new CA/CRL files load, then let
- * every process know it has to rebuild its own store */
-static int reload_cert_store(void)
-{
-	X509_STORE *test_store;
-	int rc;
-
-	test_store = build_cert_store(&rc);
-	if (!test_store)
-		return rc;
-	X509_STORE_free(test_store);
-
-	lock_get(&store_gen->lock);
-	store_gen->gen++;
-	lock_release(&store_gen->lock);
-
-	return 0;
-}
-
 /* rebuild this process' store if a reload happened since the last one */
 static void refresh_cert_store(void)
 {
@@ -441,6 +423,37 @@ static void refresh_cert_store(void)
 		store = new_store;
 	}
 	store_local_gen = gen;
+}
+
+static void refresh_cert_store_rpc(int sender, void *param)
+{
+	refresh_cert_store();
+}
+
+/* called by the MI reloads: make sure the new CA/CRL files load, bump the
+ * generation, then ask all the running processes to rebuild their store
+ * right away. Processes started later (e.g. by auto-scaling) and any that
+ * missed the request still catch up through the generation check done
+ * before each certificate verification. */
+static int reload_cert_store(void)
+{
+	X509_STORE *test_store;
+	int rc;
+
+	test_store = build_cert_store(&rc);
+	if (!test_store)
+		return rc;
+	X509_STORE_free(test_store);
+
+	lock_get(&store_gen->lock);
+	store_gen->gen++;
+	lock_release(&store_gen->lock);
+
+	if (ipc_send_rpc_all(refresh_cert_store_rpc, NULL) <= 0)
+		LM_WARN("could not notify the processes, they will rebuild their "
+			"store before the next verification\n");
+
+	return 0;
 }
 
 static void parsed_ctx_free(void *param)

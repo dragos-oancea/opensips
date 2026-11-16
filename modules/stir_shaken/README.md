@@ -889,8 +889,9 @@ At least one of *ca_list* or *ca_dir* must be set.
 The whole verification store is rebuilt from the current files - trusted CAs,
 system-wide CAs and CRLs - so the CRLs remain in use. The new files are
 first checked in the MI process; if they fail to load, an error is returned and
-nothing changes. Otherwise, every process rebuilds its own store before its
-next certificate verification.
+nothing changes. Otherwise, every running process rebuilds its own store
+right away. Processes started later, e.g. by auto-scaling, rebuild it before
+their first certificate verification.
 
 
 Name: *stir_shaken:ca_reload*
